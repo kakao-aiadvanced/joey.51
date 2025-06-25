@@ -27,21 +27,32 @@ st.set_page_config(
 
 ### Index
 
+base_url = "https://zh.wikisource.org/wiki/%E4%B8%89%E5%9C%8B%E5%BF%97/%E5%8D%B7"
+
+# 생성된 URL을 저장할 빈 리스트를 만듭니다.
+url_list = [f"{base_url}{i:02d}" for i in range(1, 66)]
+
 urls = [
     "https://lilianweng.github.io/posts/2023-06-23-agent/",
     "https://lilianweng.github.io/posts/2023-03-15-prompt-engineering/",
     "https://lilianweng.github.io/posts/2023-10-25-adv-attack-llm/",
+    "https://zh.wikisource.org/wiki/%E4%B8%89%E5%9C%8B%E5%BF%97/%E5%8D%B732",
+    "https://zh.wikisource.org/wiki/%E4%B8%89%E5%9C%8B%E5%BF%97/%E5%8D%B735",
+    "https://zh.wikisource.org/wiki/%E4%B8%89%E5%9C%8B%E5%BF%97/%E5%8D%B736"
 ]
+
 
 docs = [WebBaseLoader(url).load() for url in urls]
 # docs>sublist>item
 docs_list = [item for sublist in docs for item in sublist]
 
 text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-    chunk_size=250, chunk_overlap=0
+    chunk_size=500, chunk_overlap=0
 )
 
 doc_splits = text_splitter.split_documents(docs_list)
+
+#st.markdown(doc_splits)
 
 # Add to vectorDB
 vectorstore = Chroma.from_documents(
@@ -142,9 +153,22 @@ def retrieve(state):
 
     # Retrieval
     documents = retriever.invoke(question)
+
+    unique_docs = []
+    seen_contents = set()
+
+    for doc in documents:
+        # 현재 문서의 page_content가 아직 본 적 없는 내용이라면
+        if doc.page_content not in seen_contents:
+            # 결과 리스트에 현재 문서를 추가하고
+            unique_docs.append(doc)
+            # 이 page_content를 "본 내용"으로 기록합니다.
+            seen_contents.add(doc.page_content)
+
+
     st.markdown(question)
-    st.markdown(documents)
-    return {"documents": documents, "question": question, "retry": 0}
+    st.markdown(unique_docs)
+    return {"documents": unique_docs, "question": question, "retry": 0}
 
 def generate(state):
     """
@@ -177,7 +201,6 @@ def web_search(state):
     """
 
     st.markdown("---WEB SEARCH---")
-    st.markdown(state)
     question = state["question"]
 
     # Web search
@@ -193,8 +216,7 @@ def web_search(state):
     retry = state["retry"]        
     return {"documents": web_results, "question": question, "retry": retry + 1}
 
-### Conditional edge
-def relevance_checker(state):
+def relevance_filter(state):
     """
     Determines whether to generate an answer, or add web search
 
@@ -205,13 +227,10 @@ def relevance_checker(state):
         str: Binary decision for next node to call
     """
 
-    st.markdown("---RELEVANCE CHECKER---")
+    st.markdown("---RELEVANCE FILTER---")
     question = state["question"]
     documents = state["documents"]
     retry = state["retry"]
-
-    if retry > 1:
-      raise ValueError("failed: not relevant")
     
     # Score each doc
     filtered_docs = []
@@ -232,6 +251,27 @@ def relevance_checker(state):
     st.markdown("########### filtered_docs")
     st.markdown(filtered_docs)
     if len(filtered_docs) > 0:
+      return {"documents": filtered_docs, "question": question, "retry": retry}
+    else:
+      return {"documents": [], "question": question, "retry": retry}
+
+### Conditional edge
+def relevance_checker(state):
+    """
+    Determines whether to generate an answer, or add web search
+
+    Args:
+        state (dict): The current graph state
+
+    Returns:
+        str: Binary decision for next node to call
+    """
+
+    st.markdown("---RELEVANCE CHECKER---")
+    question = state["question"]
+    documents = state["documents"]
+
+    if len(documents) > 0:
       return "generate"
     else:
       return "websearch"
@@ -276,13 +316,16 @@ workflow = StateGraph(GraphState)
 
 # Define the nodes
 workflow.add_node("retrieve", retrieve)  # retrieve
+workflow.add_node("filter", relevance_filter)  # relevance_filter
 workflow.add_node("generate", generate)  # generatae
 workflow.add_node("websearch", web_search)  # web search
 
 workflow.set_entry_point("retrieve")
 
+workflow.add_edge("retrieve","filter")
+
 workflow.add_conditional_edges(
-    "retrieve",
+    "filter",
     relevance_checker,
     {
         "generate": "generate",
