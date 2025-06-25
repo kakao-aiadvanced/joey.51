@@ -1,6 +1,5 @@
 import os
 import streamlit as st
-from pprint import pprint
 from typing import List, TypedDict
 
 from google.colab import userdata
@@ -138,13 +137,13 @@ def retrieve(state):
     Returns:
         state (dict): New key added to state, documents, that contains retrieved documents
     """
-    print("---RETRIEVE---")
+    st.markdown("---RETRIEVE---")
     question = state["question"]
 
     # Retrieval
     documents = retriever.invoke(question)
-    print(question)
-    print(documents)
+    st.markdown(question)
+    st.markdown(documents)
     return {"documents": documents, "question": question, "retry": 0}
 
 def generate(state):
@@ -157,7 +156,7 @@ def generate(state):
     Returns:
         state (dict): New key added to state, generation, that contains LLM generation
     """
-    print("---GENERATE---")
+    st.markdown("---GENERATE---")
     question = state["question"]
     documents = state["documents"]
 
@@ -177,8 +176,8 @@ def web_search(state):
         state (dict): Appended web results to documents
     """
 
-    print("---WEB SEARCH---")
-    print(state)
+    st.markdown("---WEB SEARCH---")
+    st.markdown(state)
     question = state["question"]
 
     # Web search
@@ -188,8 +187,8 @@ def web_search(state):
       wd = Document(page_content=d["content"], metadata={"source": d["url"]})
       web_results.append(wd)
       
-    print("########## web_results")
-    print(web_results)
+    st.markdown("########## web_results")
+    st.markdown(web_results)
 
     retry = state["retry"]        
     return {"documents": web_results, "question": question, "retry": retry + 1}
@@ -206,7 +205,7 @@ def relevance_checker(state):
         str: Binary decision for next node to call
     """
 
-    print("---RELEVANCE CHECKER---")
+    st.markdown("---RELEVANCE CHECKER---")
     question = state["question"]
     documents = state["documents"]
     retry = state["retry"]
@@ -225,13 +224,13 @@ def relevance_checker(state):
       score = result["score"]
 
       if score.lower() == "yes":
-          print("---GRADE: DOCUMENT RELEVANT---")
+          st.markdown("---GRADE: DOCUMENT RELEVANT---")
           filtered_docs.append(d)
       else:
-          print("---GRADE: DOCUMENT NOT RELEVANT---")
+          st.markdown("---GRADE: DOCUMENT NOT RELEVANT---")
     
-    print("########### filtered_docs")
-    print(filtered_docs)
+    st.markdown("########### filtered_docs")
+    st.markdown(filtered_docs)
     if len(filtered_docs) > 0:
       return "generate"
     else:
@@ -248,7 +247,7 @@ def hallucination_checker(state):
         str: Decision for next node to call
     """
 
-    print("---CHECK HALLUCINATIONS---")
+    st.markdown("---CHECK HALLUCINATIONS---")
     question = state["question"]
     documents = state["documents"]
     generation = state["generation"]
@@ -264,10 +263,10 @@ def hallucination_checker(state):
 
     # Check hallucination
     if grade == "yes":
-        print("---DECISION: GENERATION ADDRESSES QUESTION---")
+        st.markdown("---DECISION: GENERATION ADDRESSES QUESTION---")
         return "useful"
     else:
-        pprint("---DECISION: GENERATION IS NOT GROUNDED IN DOCUMENTS, RE-TRY---")
+        st.markdown("---DECISION: GENERATION IS NOT GROUNDED IN DOCUMENTS, RE-TRY---")
         return "not supported"
 
 
@@ -319,7 +318,7 @@ st.title("Research Assistant powered by OpenAI")
 
 input_topic = st.text_input(
     "질문을 입력하세요.",
-    value="Superfast Llama 3 inference on Groq Cloud",
+    value="여기에 질문 입력",
 )
 
 generate_report = st.button("답해줘")
@@ -329,7 +328,7 @@ if generate_report:
         inputs = {"question": input_topic}
         for output in app.stream(inputs):
             for key, value in output.items():
-                print(f"Finished running: {key}:")
+                st.markdown(f"Finished running: {key}:")
         final_report = value["generation"]
         st.markdown(final_report)
 
